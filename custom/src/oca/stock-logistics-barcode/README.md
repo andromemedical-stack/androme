@@ -1,0 +1,1 @@
+OCA stock-logistics-barcode
