@@ -97,3 +97,6 @@ async def sync_stock():
         prod_id = found[0]['id']
         woo.put(f'products/{prod_id}', data={'manage_stock': True, 'stock_quantity': int(p.get('qty_available') or 0)})
     return {'status': 'done'}
+if __name__ == "__main__":
+    import uvicorn, os
+    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", "10000")))
