@@ -40,11 +40,14 @@ def _find_or_create_product(line):
         ids = odoo.execute_kw('product.product', 'search', [[('barcode', '=', sku)]], {'limit': 1})
     if ids:
         return ids[0]
+    # Création du produit (Odoo 19 : utiliser detailed_type + list_price)
     return odoo.execute_kw('product.product', 'create', [{
         'name': line.get('name') or f"Woo product {sku}",
         'default_code': sku,
-        'lst_price': float(line.get('price') or 0.0),
-        'type': 'product',
+        'list_price': float(line.get('price') or 0.0),
+        'detailed_type': 'product',   # <- au lieu de 'type': 'product'
+        'sale_ok': True,
+        'purchase_ok': False,
     }])
 
 def _create_sale_order(order):
@@ -88,15 +91,23 @@ async def woo_order_webhook(request: Request):
 
 @app.post('/sync/stock')
 async def sync_stock():
-    products = odoo.execute_kw('product.product', 'search_read', [[('sale_ok','=',True)]], {'fields': ['id','default_code','qty_available'], 'limit': 2000})
+    products = odoo.execute_kw(
+        'product.product', 'search_read',
+        [[('sale_ok', '=', True)]],
+        {'fields': ['id', 'default_code', 'qty_available'], 'limit': 2000}
+    )
     for p in products:
         sku = p.get('default_code') or str(p['id'])
         found = woo.get('products', params={'sku': sku})
         if not found:
             continue
         prod_id = found[0]['id']
-        woo.put(f'products/{prod_id}', data={'manage_stock': True, 'stock_quantity': int(p.get('qty_available') or 0)})
+        woo.put(f'products/{prod_id}', data={
+            'manage_stock': True,
+            'stock_quantity': int(p.get('qty_available') or 0)
+        })
     return {'status': 'done'}
+
 if __name__ == "__main__":
-    import uvicorn, os
+    import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", "10000")))
