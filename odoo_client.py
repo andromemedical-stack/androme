@@ -1,10 +1,12 @@
 import os
+import httpx   # 👈 très important, c’est ça qui manquait !
 
-# .strip() = supprime les espaces, retours à la ligne, tabulations...
-ODOO_URL    = (os.getenv("ODOO_URL") or "").strip()
-ODOO_DB     = (os.getenv("ODOO_DB") or "").strip()
-ODOO_LOGIN  = (os.getenv("ODOO_LOGIN") or "").strip()
-ODOO_API_KEY= (os.getenv("ODOO_API_KEY") or "").strip()
+# On "nettoie" les variables pour éviter les erreurs avec des espaces ou retours ligne cachés
+ODOO_URL     = (os.getenv("ODOO_URL") or "").strip()
+ODOO_DB      = (os.getenv("ODOO_DB") or "").strip()
+ODOO_LOGIN   = (os.getenv("ODOO_LOGIN") or "").strip()
+ODOO_API_KEY = (os.getenv("ODOO_API_KEY") or "").strip()
+
 JSONRPC_ENDPOINT = f"{ODOO_URL}/jsonrpc"
 
 class OdooRPC:
