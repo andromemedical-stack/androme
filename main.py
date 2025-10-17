@@ -35,6 +35,7 @@ def _ensure_partner(order):
 
 def _find_or_create_product(line):
     sku = line.get('sku') or str(line.get('product_id'))
+
     # 1) Cherche une variante existante par SKU (default_code) puis par barcode
     ids = odoo.execute_kw('product.product', 'search', [[('default_code', '=', sku)]], {'limit': 1})
     if not ids:
@@ -42,18 +43,32 @@ def _find_or_create_product(line):
     if ids:
         return ids[0]
 
-    # 2) Sinon, crée un TEMPLATE, puis récupère la variante (Odoo 19)
+    # 2) Sinon, crée un TEMPLATE, puis récupère la variante
     name = line.get('name') or f"Woo product {sku}"
     price = float(line.get('price') or 0.0)
 
+    # IMPORTANT: ne pas envoyer de champ de type (évite les erreurs de version/modules)
     tmpl_id = odoo.execute_kw('product.template', 'create', [{
         'name': name,
-        'default_code': sku,     # code interne
-        'list_price': price,     # prix de vente (TEMPLATE)
-        'detailed_type': 'product',  # 'product' (stockable) | 'consu' | 'service'
+        'default_code': sku,   # code interne
+        'list_price': price,   # prix de vente
         'sale_ok': True,
         'purchase_ok': False,
     }])
+
+    # Si possible, définir le type comme 'product' (stockable) selon le champ disponible
+    try:
+        flds = odoo.execute_kw('product.template', 'fields_get', [['type', 'detailed_type']])
+        updates = {}
+        if 'type' in flds:
+            updates['type'] = 'product'
+        elif 'detailed_type' in flds:
+            updates['detailed_type'] = 'product'
+        if updates:
+            odoo.execute_kw('product.template', 'write', [[tmpl_id], updates])
+    except Exception:
+        # soft-fail: on laisse le type par défaut
+        pass
 
     # Lire la variante créée automatiquement
     variant_info = odoo.execute_kw('product.template', 'read', [[tmpl_id], ['product_variant_id']])
@@ -68,7 +83,7 @@ def _create_sale_order(order):
 
     partner_id = _ensure_partner(order)
     lines = []
-    for l in order.get('line_items', []) or []:
+    for l in (order.get('line_items') or []):
         pid = _find_or_create_product(l)
         m = map_sale_line(l)
         lines.append((0, 0, {
