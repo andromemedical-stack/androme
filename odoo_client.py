@@ -1,10 +1,10 @@
-import httpx, os
+import os
 
-ODOO_URL = os.getenv('ODOO_URL')  # ex: https://mycompany.odoo.com
-ODOO_DB = os.getenv('ODOO_DB')
-ODOO_LOGIN = os.getenv('ODOO_LOGIN')
-ODOO_API_KEY = os.getenv('ODOO_API_KEY')  # API key générée dans Odoo (utilisée comme mot de passe)
-
+# .strip() = supprime les espaces, retours à la ligne, tabulations...
+ODOO_URL    = (os.getenv("ODOO_URL") or "").strip()
+ODOO_DB     = (os.getenv("ODOO_DB") or "").strip()
+ODOO_LOGIN  = (os.getenv("ODOO_LOGIN") or "").strip()
+ODOO_API_KEY= (os.getenv("ODOO_API_KEY") or "").strip()
 JSONRPC_ENDPOINT = f"{ODOO_URL}/jsonrpc"
 
 class OdooRPC:
