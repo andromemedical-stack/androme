@@ -35,29 +35,40 @@ def _ensure_partner(order):
 
 def _find_or_create_product(line):
     sku = line.get('sku') or str(line.get('product_id'))
+    # 1) Cherche une variante existante par SKU (default_code) puis par barcode
     ids = odoo.execute_kw('product.product', 'search', [[('default_code', '=', sku)]], {'limit': 1})
     if not ids:
         ids = odoo.execute_kw('product.product', 'search', [[('barcode', '=', sku)]], {'limit': 1})
     if ids:
         return ids[0]
-    # Création du produit (Odoo 19 : utiliser detailed_type + list_price)
-    return odoo.execute_kw('product.product', 'create', [{
-        'name': line.get('name') or f"Woo product {sku}",
-        'default_code': sku,
-        'list_price': float(line.get('price') or 0.0),
-        'detailed_type': 'product',   # <- au lieu de 'type': 'product'
+
+    # 2) Sinon, crée un TEMPLATE, puis récupère la variante (Odoo 19)
+    name = line.get('name') or f"Woo product {sku}"
+    price = float(line.get('price') or 0.0)
+
+    tmpl_id = odoo.execute_kw('product.template', 'create', [{
+        'name': name,
+        'default_code': sku,     # code interne
+        'list_price': price,     # prix de vente (TEMPLATE)
+        'detailed_type': 'product',  # 'product' (stockable) | 'consu' | 'service'
         'sale_ok': True,
         'purchase_ok': False,
     }])
+
+    # Lire la variante créée automatiquement
+    variant_info = odoo.execute_kw('product.template', 'read', [[tmpl_id], ['product_variant_id']])
+    variant_id = variant_info[0]['product_variant_id'][0]
+    return variant_id
 
 def _create_sale_order(order):
     ext_ref = f"WOO-{order['id']}"
     existing = odoo.execute_kw('sale.order', 'search', [[('client_order_ref', '=', ext_ref)]], {'limit': 1})
     if existing:
         return existing[0]
+
     partner_id = _ensure_partner(order)
     lines = []
-    for l in order.get('line_items', []):
+    for l in order.get('line_items', []) or []:
         pid = _find_or_create_product(l)
         m = map_sale_line(l)
         lines.append((0, 0, {
@@ -66,12 +77,16 @@ def _create_sale_order(order):
             'product_uom_qty': m['product_uom_qty'],
             'price_unit': m['price_unit'],
         }))
+
     so_id = odoo.execute_kw('sale.order', 'create', [{
         'partner_id': partner_id,
         'client_order_ref': ext_ref,
         'origin': 'WooCommerce',
     }])
-    odoo.execute_kw('sale.order', 'write', [[so_id], {'order_line': lines}])
+
+    if lines:
+        odoo.execute_kw('sale.order', 'write', [[so_id], {'order_line': lines}])
+
     if os.getenv('AUTO_CONFIRM_SALE', 'false').lower() == 'true':
         odoo.execute_kw('sale.order', 'action_confirm', [[so_id]])
     return so_id
